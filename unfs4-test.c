@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 #include "unfs4.h"
@@ -52,6 +53,7 @@ int main(int argc, char *argv[])
 {
         static uint8_t buf[65536], big[20000];
         struct unfs4_context *u;
+        struct timeval tv;
         struct unfs4_attr st;
         char dir[64], a[96], b[96], name[128];
         uint8_t *fh;
@@ -66,6 +68,8 @@ int main(int argc, char *argv[])
                 printf("connect failed\n");
                 return 1;
         }
+        gettimeofday(&tv, NULL);
+        u->xid = tv.tv_sec * 1000000 + tv.tv_usec;
         printf("context %zu bytes, dir handle %zu bytes\n",
                sizeof(*u), sizeof(struct unfs4_dir));
         if (unfs4_mount(u, argv[2])) {
@@ -156,6 +160,44 @@ int main(int argc, char *argv[])
         snprintf(b, sizeof(b), "%s/renamed.txt", dir);
         CHECK(unfs4_rename(u, a, b) == 0, "rename");
         CHECK(unfs4_stat(u, a, &st) != 0 && unfs4_stat(u, b, &st) == 0, "rename moved it");
+
+        /* A 440 byte path, as usmb2 takes in Launchstation, with a 255 byte name */
+        {
+                char sub[512], lp[512], huge[1100];
+                int n = snprintf(sub, sizeof(sub), "%s/", dir);
+
+                memset(sub + n, 'd', 440 - 256 - n);
+                sub[440 - 256] = 0;
+                n = snprintf(lp, sizeof(lp), "%s/", sub);
+                memset(lp + n, 'f', 255);
+                lp[n + 255] = 0;
+                CHECK(strlen(lp) == 440, "long path is 440 bytes");
+                CHECK(unfs4_mkdir(u, sub) == 0, "mkdir long name");
+                fh = unfs4_open(u, lp, O_RDWR | O_CREAT);
+                CHECK(fh != NULL, "create 440 byte path");
+                if (fh) {
+                        CHECK(unfs4_pwrite(u, fh, (uint8_t *)"x", 1, 0) == 1, "write 440 byte path");
+                        free(fh);
+                }
+                CHECK(unfs4_stat(u, lp, &st) == 0 && st.size == 1, "stat 440 byte path");
+                {
+                        struct unfs4_dir *dh = unfs4_opendir(u, sub);
+                        struct unfs4_dirent *de = dh ? unfs4_readdir(u, dh) : NULL;
+                        CHECK(de && strlen(de->name) == 255, "readdir 255 byte name");
+                        free(dh);
+                }
+                /* too long: refused, not written past the buffer */
+                memset(huge, 'h', sizeof(huge) - 1);
+                huge[sizeof(huge) - 1] = 0;
+                for (i = 200; i < (int)sizeof(huge) - 1; i += 201) {
+                        huge[i] = '/';
+                }
+                CHECK(unfs4_open(u, huge, O_RDONLY) == NULL, "over-long path refused");
+                CHECK(unfs4_stat(u, huge, &st) != 0, "over-long stat refused");
+                CHECK(unfs4_rename(u, lp, lp) != 0, "rename of two 440 byte paths refused");
+                CHECK(unfs4_unlink(u, lp) == 0, "unlink 440 byte path");
+                CHECK(unfs4_rmdir(u, sub) == 0, "rmdir long name");
+        }
 
         list(u, dir);
 

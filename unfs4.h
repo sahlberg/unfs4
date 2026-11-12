@@ -50,13 +50,19 @@
 
 /* Requests and replies, other than READ data and READDIR entries, go
  * through this buffer. A request is 76 bytes of RPC and COMPOUND headers,
- * PUTFH and the filehandle, then a LOOKUP per path component.
+ * PUTFH and the filehandle, then a LOOKUP per path component. 1024, as
+ * usmb2 in Launchstation, takes a 440 byte path. A path that does not fit
+ * fails the call. A rename carries both paths.
  */
-#define UNFS4_SIZE 512
+#ifndef UNFS4_SIZE
+#define UNFS4_SIZE 1024
+#endif
 
-/* Amount of READDIR entries to store in the directory handle */
+/* Bytes of READDIR entries to store in the directory handle. An entry is
+ * about 60 bytes and the name, so this holds one with a 440 byte name.
+ */
 #ifndef UNFS4_DIR_SIZE
-#define UNFS4_DIR_SIZE 256
+#define UNFS4_DIR_SIZE 1024
 #endif
 
 /* NFSv4 file types, struct unfs4_attr type */
@@ -108,6 +114,11 @@ extern struct tcp_context *unfs4_tcp;
 
 /* Connects to the server. ip is in network byte order. uid and gid are sent
  * as AUTH_SYS credentials with every request.
+ *
+ * Then set xid from a clock in microseconds. Every request takes the next
+ * xid, and creating a file uses it as the open owner, which the server
+ * remembers for a lease time: a session that reuses the xids of the last
+ * one fails to create files with BAD_SEQID.
  */
 struct unfs4_context *unfs4_init_context(uint32_t ip, uint32_t uid, uint32_t gid);
 

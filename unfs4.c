@@ -313,6 +313,28 @@ static uint8_t *put_fh(struct unfs4_context *unfs4, uint8_t *p, const uint8_t *f
         return p + len;
 }
 
+/* Bytes path takes in a request, a LOOKUP or a name for each component */
+static int path_size(const char *path)
+{
+        int n = 0, len;
+
+        while (*path) {
+                while (*path == '/') {
+                        path++;
+                }
+                for (len = 0; path[len] && path[len] != '/'; len++) {
+                }
+                if (len) {
+                        n += 8 + ((len + 3) & ~3);
+                }
+                path += len;
+        }
+        return n;
+}
+
+/* Room for the paths: the headers, two PUTFH and the largest tail, OPEN */
+#define PATH_ROOM (UNFS4_SIZE - 76 - 2 * (4 + 4 + UNFS4_MAX_FH) - 84)
+
 /* PUTFH of the export, then a LOOKUP for each component of path. With last,
  * not for the last one: it is returned in *last.
  */
@@ -433,7 +455,12 @@ static uint32_t unfs4_rpc(struct unfs4_context *unfs4, uint8_t *p,
 /* Looks up path and copies its filehandle to fh */
 static int unfs4_lookup(struct unfs4_context *unfs4, const char *path, uint8_t *fh)
 {
-        uint8_t *p = put_path(unfs4, unfs4_cmd_hdr(unfs4), path, NULL);
+        uint8_t *p;
+
+        if (path_size(path) > PATH_ROOM) {
+                return -1;
+        }
+        p = put_path(unfs4, unfs4_cmd_hdr(unfs4), path, NULL);
 
         p = put_op(unfs4, p, OP_GETFH);
         if (unfs4_rpc(unfs4, p, NULL, 0, NULL, 0)) {
@@ -459,6 +486,9 @@ static uint8_t *unfs4_create(struct unfs4_context *unfs4, const char *name, uint
         const char *last;
         int n, confirm;
 
+        if (path_size(name) > PATH_ROOM) {
+                return NULL;
+        }
         /*
          * SETCLIENTID: verifier 0, our name, a callback the server cannot
          * reach so that it does not hand out delegations
@@ -651,6 +681,9 @@ int unfs4_size(struct unfs4_context *unfs4, uint8_t *fh)
 #ifdef UNFS4_FEATURE_STAT
 int unfs4_stat(struct unfs4_context *unfs4, const char *name, struct unfs4_attr *st)
 {
+        if (path_size(name) > PATH_ROOM) {
+                return -1;
+        }
         return unfs4_getattr(unfs4, put_path(unfs4, unfs4_cmd_hdr(unfs4), name, NULL), st);
 }
 #endif /* UNFS4_FEATURE_STAT */
@@ -659,7 +692,12 @@ int unfs4_stat(struct unfs4_context *unfs4, const char *name, struct unfs4_attr 
 int unfs4_mkdir(struct unfs4_context *unfs4, const char *name)
 {
         const char *last;
-        uint8_t *p = put_path(unfs4, unfs4_cmd_hdr(unfs4), name, &last);
+        uint8_t *p;
+
+        if (path_size(name) > PATH_ROOM) {
+                return -1;
+        }
+        p = put_path(unfs4, unfs4_cmd_hdr(unfs4), name, &last);
 
         /* CREATE: type NF4DIR, the name, mode 0755 */
         p = put_op(unfs4, p, OP_CREATE);
@@ -673,7 +711,12 @@ int unfs4_mkdir(struct unfs4_context *unfs4, const char *name)
 int unfs4_remove(struct unfs4_context *unfs4, const char *name)
 {
         const char *last;
-        uint8_t *p = put_path(unfs4, unfs4_cmd_hdr(unfs4), name, &last);
+        uint8_t *p;
+
+        if (path_size(name) > PATH_ROOM) {
+                return -1;
+        }
+        p = put_path(unfs4, unfs4_cmd_hdr(unfs4), name, &last);
 
         p = put_name(put_op(unfs4, p, OP_REMOVE), last);
         return unfs4_rpc(unfs4, p, NULL, 0, NULL, 0) ? -1 : 0;
@@ -684,7 +727,12 @@ int unfs4_remove(struct unfs4_context *unfs4, const char *name)
 int unfs4_rename(struct unfs4_context *unfs4, const char *oldname, const char *newname)
 {
         const char *oldlast, *newlast;
-        uint8_t *p = put_path(unfs4, unfs4_cmd_hdr(unfs4), oldname, &oldlast);
+        uint8_t *p;
+
+        if (path_size(oldname) + path_size(newname) > PATH_ROOM) {
+                return -1;
+        }
+        p = put_path(unfs4, unfs4_cmd_hdr(unfs4), oldname, &oldlast);
 
         /* The saved filehandle is the old directory, the current the new */
         p = put_op(unfs4, p, OP_SAVEFH);

@@ -64,3 +64,7 @@ Linux knfsd with a 1 MB file.
 
   make size
 shows the code size of the client with no features and with all of them.
+
+Licence
+-------
+BSD 2-Clause, see LICENSE.

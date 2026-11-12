@@ -49,7 +49,8 @@ int main(int argc, char *argv[])
         struct timeval tv;
         uint8_t *fh, buf[READ_SIZE];
         char path[1024];
-        int fd, rc, size;
+        int fd, rc;
+        int64_t size;
         uint64_t pos;
 
         if (argc != 5) {
@@ -117,7 +118,7 @@ int main(int argc, char *argv[])
                 }
                 fwrite(buf, 1, rc, stdout);
         }
-        fprintf(stderr, "read %llu of %d bytes, last rc %d\n", (unsigned long long)pos, size, rc);
+        fprintf(stderr, "read %llu of %lld bytes, last rc %d\n", (unsigned long long)pos, (long long)size, rc);
         unfs4_close(unfs4, fh);
         return rc < 0;
 }

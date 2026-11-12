@@ -141,8 +141,8 @@ int32_t unfs4_prw(struct unfs4_context *unfs4, int op, uint8_t *fh, uint8_t *rbu
 #define unfs4_pwrite(u, fh, buf, count, offset) unfs4_prw(u, 38, fh, NULL, buf, count, offset)
 #endif
 
-/* Size in bytes, or -1 */
-int unfs4_size(struct unfs4_context *unfs4, uint8_t *fh);
+/* Size in bytes, or -1. 64 bits: a DVD image can be over 4 GB. */
+int64_t unfs4_size(struct unfs4_context *unfs4, uint8_t *fh);
 
 #ifdef UNFS4_FEATURE_OPENDIR
 struct unfs4_dir *unfs4_opendir(struct unfs4_context *unfs4, const char *name);

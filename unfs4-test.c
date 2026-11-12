@@ -85,7 +85,7 @@ int main(int argc, char *argv[])
                 CHECK(fh != NULL, "open file to cat");
                 if (fh) {
                         uint64_t off = 0;
-                        printf("size %d\n", unfs4_size(u, fh));
+                        printf("size %lld\n", (long long)unfs4_size(u, fh));
                         while ((n = unfs4_pread(u, fh, buf, 2048, off)) > 0) {
                                 fwrite(buf, 1, n, stdout);
                                 off += n;

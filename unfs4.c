@@ -671,7 +671,7 @@ static int unfs4_getattr(struct unfs4_context *unfs4, uint8_t *p, struct unfs4_a
         return 0;
 }
 
-int unfs4_size(struct unfs4_context *unfs4, uint8_t *fh)
+int64_t unfs4_size(struct unfs4_context *unfs4, uint8_t *fh)
 {
         struct unfs4_attr a;
 

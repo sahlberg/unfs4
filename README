@@ -1,0 +1,53 @@
+unfs4 - a minimal NFSv4.0 client
+================================
+
+The sibling of usmb2: the same API shape, the same feature flags and the
+same tiny TCP hooks, but for NFS instead of SMB2. It aims at minimal code
+and data size for retro targets.
+
+Why NFSv4.0
+-----------
+NFSv3 needs three protocols (portmapper, MOUNT and NFS). NFSv4 is one
+program on TCP port 2049, and the export is reached with PUTROOTFH and
+LOOKUPs. NFSv4.1 would need EXCHANGE_ID, CREATE_SESSION and a SEQUENCE in
+every request; NFSv4.0 lets us keep no state at all.
+
+How it stays stateless
+----------------------
+* Credentials are AUTH_SYS with a fixed uid and gid. No authentication.
+* Every request is one COMPOUND that starts from the export: PUTFH, a
+  LOOKUP per path component, then the operation.
+* A "file handle" is the NFS filehandle (XDR opaque, up to UNFS4_MAX_FH
+  bytes). Opening a file is LOOKUP and GETFH; closing it is free().
+* READ and WRITE use the anonymous stateid, so there is no OPEN, no
+  SETCLIENTID and no lease to renew. WRITE is FILE_SYNC, so no COMMIT.
+* Only creating a regular file needs an OPEN (UNFS4_FEATURE_CREATE):
+  SETCLIENTID, then SETCLIENTID_CONFIRM + OPEN in one request, then
+  GETFH + OPEN_CONFIRM + CLOSE. Nothing stays open afterwards.
+
+Server requirements
+-------------------
+* NFSv4.0 enabled (cat /proc/fs/nfsd/versions on Linux shows +4.0).
+* With the sockets API the client uses an ordinary port above 1023, so a
+  Linux export needs the "insecure" option.
+* The Windows NFS server only does 4.1 and will not work.
+
+Features
+--------
+See unfs4.h. unfs4_open() with O_CREAT creates the file, it does not
+truncate an existing one. unfs4_rename() replaces an existing target.
+readdir does not return "." and "..".
+
+Testing
+-------
+  make
+  ./unfs4-test <server-ip> <export> [file-to-cat]
+
+It lists the export, then works in a scratch directory unfs4-test.<pid>.
+Passes against Linux knfsd (localhost:/data and nfs-server-1:/home/nfsshare).
+
+The UNFS4_FEATURE_TINY_TCP / UNFS4_FEATURE_REASSEMBLY code follows usmb2
+and has not been built or tested yet.
+
+  make size
+shows the code size of the client with no features and with all of them.

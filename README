@@ -46,8 +46,21 @@ Testing
 It lists the export, then works in a scratch directory unfs4-test.<pid>.
 Passes against Linux knfsd (localhost:/data and nfs-server-1:/home/nfsshare).
 
-The UNFS4_FEATURE_TINY_TCP / UNFS4_FEATURE_REASSEMBLY code follows usmb2
-and has not been built or tested yet.
+unfs4-cat-host runs unfs4 on usmb2's tiny TCP/IP stack, with
+UNFS4_FEATURE_TINY_TCP and UNFS4_FEATURE_REASSEMBLY as Neutrino builds it,
+on raw sockets. It needs CAP_NET_RAW and the kernel's RSTs for the
+connection dropped, which a pasta namespace gives without root; the
+gateway address reaches the host:
+
+  make unfs4-cat-host USMB2_DIR=../usmb2
+  pasta --config-net -- sh -c '
+    nft add table ip f
+    nft add chain ip f out "{ type filter hook output priority 0; }"
+    nft add rule ip f out tcp dport 2049 tcp flags rst drop
+    ./unfs4-cat-host <gateway-ip> <export> <dir> <file> > out'
+
+It lists <dir> and reads <file> 2048 bytes at a time. Passes against
+Linux knfsd with a 1 MB file.
 
   make size
 shows the code size of the client with no features and with all of them.

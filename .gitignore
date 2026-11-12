@@ -1,2 +1,3 @@
 *.o
 unfs4-test
+unfs4-cat-host

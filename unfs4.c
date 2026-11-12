@@ -261,10 +261,13 @@ static uint8_t *put_opaque(uint8_t *p, const void *data, int len)
         return p + ((len + 3) & ~3);
 }
 
+#if defined(UNFS4_FEATURE_CREATE) || defined(UNFS4_FEATURE_MKDIR) || \
+    defined(UNFS4_FEATURE_UNLINK) || defined(UNFS4_FEATURE_RENAME)
 static uint8_t *put_name(uint8_t *p, const char *name)
 {
         return put_opaque(p, name, strlen(name));
 }
+#endif
 
 static uint8_t *put_op(struct unfs4_context *unfs4, uint8_t *p, uint32_t op)
 {

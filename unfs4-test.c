@@ -162,6 +162,15 @@ int main(int argc, char *argv[])
         free(fh);
         CHECK(unfs4_stat(u, a, &st) == 0 && st.type == NF4REG &&
               st.size == sizeof(big) + 3, "stat file");
+        /* O_EXCL: the server refuses an existing file, and creates a new one */
+        fh = unfs4_open(u, a, O_RDWR | O_CREAT | O_EXCL);
+        CHECK(fh == NULL && u->status == 17, "O_EXCL on an existing file");
+        free(fh);
+        snprintf(name, sizeof(name), "%s/excl.txt", dir);
+        fh = unfs4_open(u, name, O_RDWR | O_CREAT | O_EXCL);
+        CHECK(fh != NULL && unfs4_size(u, fh) == 0, "O_EXCL creates a new file");
+        free(fh);
+        CHECK(unfs4_unlink(u, name) == 0, "remove the O_EXCL file");
 
         /* enough entries for several READDIRs */
         for (i = 0; i < 20; i++) {

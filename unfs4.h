@@ -108,6 +108,9 @@ struct unfs4_context {
         int nops;
         /* Of the last call: 0, an NFS4ERR_*, or UNFS4_ERR_CONN */
         uint32_t status;
+        /* Names this client to the server when it creates a file: the
+         * first xid then, so two clients never share a name */
+        uint32_t id;
         /* The filehandle of the export as XDR opaque: length, then data */
         uint8_t root[4 + UNFS4_MAX_FH];
         uint8_t buf[UNFS4_SIZE];

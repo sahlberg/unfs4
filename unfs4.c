@@ -528,18 +528,30 @@ int unfs4_mount(struct unfs4_context *unfs4, const char *path)
 static uint8_t *unfs4_create(struct unfs4_context *unfs4, const char *name, uint8_t *fh)
 {
         uint8_t *p, clientid[16], stateid[16];
+        char id[14] = "unfs4-";
         const char *last;
+        uint32_t x;
         int n, confirm;
 
         if (too_long(unfs4, path_size(name))) {
                 return NULL;
         }
         /*
+         * The server keeps a client's record for a lease time, and refuses
+         * its name to another client, one with other credentials, until then
+         */
+        if (unfs4->id == 0) {
+                unfs4->id = unfs4->xid | 1;
+        }
+        for (x = unfs4->id, n = 13; n > 5; n--, x >>= 4) {
+                id[n] = "0123456789abcdef"[x & 15];
+        }
+        /*
          * SETCLIENTID: verifier 0, our name, a callback the server cannot
          * reach so that it does not hand out delegations
          */
         p = put_op(unfs4, unfs4_cmd_hdr(unfs4), OP_SETCLIENTID);
-        p = put_name(p + 8, "unfs4");
+        p = put_opaque(p + 8, id, sizeof(id));
         p = put32(p, 0x40000000);
         p = put_name(p, "tcp");
         p = put_name(p, "0.0.0.0.0.0");

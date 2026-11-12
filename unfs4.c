@@ -50,6 +50,7 @@
 #define OP_REMOVE               28
 #define OP_RENAME               29
 #define OP_SAVEFH               32
+#define OP_SETATTR              34
 #define OP_SETCLIENTID          35
 #define OP_SETCLIENTID_CONFIRM  36
 #define OP_WRITE                38
@@ -338,6 +339,18 @@ static int path_size(const char *path)
 /* Room for the paths: the headers, two PUTFH and the largest tail, OPEN */
 #define PATH_ROOM (UNFS4_SIZE - 76 - 2 * (4 + 4 + UNFS4_MAX_FH) - 84)
 
+#define NFS4ERR_NAMETOOLONG     63
+#define NFS4ERR_SERVERFAULT     10006
+
+static int too_long(struct unfs4_context *unfs4, int size)
+{
+        if (size > PATH_ROOM) {
+                unfs4->status = NFS4ERR_NAMETOOLONG;
+                return 1;
+        }
+        return 0;
+}
+
 /* PUTFH of the export, then a LOOKUP for each component of path. With last,
  * not for the last one: it is returned in *last.
  */
@@ -448,10 +461,12 @@ static uint32_t unfs4_rpc(struct unfs4_context *unfs4, uint8_t *p,
 
 #ifndef UNFS4_FEATURE_TINY_TCP
         if (unfs4->fd < 0) {
+                unfs4->status = UNFS4_ERR_CONN;
                 return -1;
         }
 #endif
         /* reply status, accept status and the COMPOUND status */
+        unfs4->status = (get32(&b[12]) | get32(&b[24])) ? NFS4ERR_SERVERFAULT : get32(&b[R_STATUS]);
         return get32(&b[12]) | get32(&b[24]) | get32(&b[R_STATUS]);
 }
 
@@ -460,7 +475,7 @@ static int unfs4_lookup(struct unfs4_context *unfs4, const char *path, uint8_t *
 {
         uint8_t *p;
 
-        if (path_size(path) > PATH_ROOM) {
+        if (too_long(unfs4, path_size(path))) {
                 return -1;
         }
         p = put_path(unfs4, unfs4_cmd_hdr(unfs4), path, NULL);
@@ -489,7 +504,7 @@ static uint8_t *unfs4_create(struct unfs4_context *unfs4, const char *name, uint
         const char *last;
         int n, confirm;
 
-        if (path_size(name) > PATH_ROOM) {
+        if (too_long(unfs4, path_size(name))) {
                 return NULL;
         }
         /*
@@ -684,7 +699,7 @@ int64_t unfs4_size(struct unfs4_context *unfs4, uint8_t *fh)
 #ifdef UNFS4_FEATURE_STAT
 int unfs4_stat(struct unfs4_context *unfs4, const char *name, struct unfs4_attr *st)
 {
-        if (path_size(name) > PATH_ROOM) {
+        if (too_long(unfs4, path_size(name))) {
                 return -1;
         }
         return unfs4_getattr(unfs4, put_path(unfs4, unfs4_cmd_hdr(unfs4), name, NULL), st);
@@ -697,7 +712,7 @@ int unfs4_mkdir(struct unfs4_context *unfs4, const char *name)
         const char *last;
         uint8_t *p;
 
-        if (path_size(name) > PATH_ROOM) {
+        if (too_long(unfs4, path_size(name))) {
                 return -1;
         }
         p = put_path(unfs4, unfs4_cmd_hdr(unfs4), name, &last);
@@ -716,7 +731,7 @@ int unfs4_remove(struct unfs4_context *unfs4, const char *name)
         const char *last;
         uint8_t *p;
 
-        if (path_size(name) > PATH_ROOM) {
+        if (too_long(unfs4, path_size(name))) {
                 return -1;
         }
         p = put_path(unfs4, unfs4_cmd_hdr(unfs4), name, &last);
@@ -732,7 +747,7 @@ int unfs4_rename(struct unfs4_context *unfs4, const char *oldname, const char *n
         const char *oldlast, *newlast;
         uint8_t *p;
 
-        if (path_size(oldname) + path_size(newname) > PATH_ROOM) {
+        if (too_long(unfs4, path_size(oldname) + path_size(newname))) {
                 return -1;
         }
         p = put_path(unfs4, unfs4_cmd_hdr(unfs4), oldname, &oldlast);
@@ -745,6 +760,22 @@ int unfs4_rename(struct unfs4_context *unfs4, const char *oldname, const char *n
         return unfs4_rpc(unfs4, p, NULL, 0, NULL, 0) ? -1 : 0;
 }
 #endif /* UNFS4_FEATURE_RENAME */
+
+#ifdef UNFS4_FEATURE_TRUNCATE
+int unfs4_truncate(struct unfs4_context *unfs4, uint8_t *fh, uint64_t size)
+{
+        uint8_t *p = put_fh(unfs4, unfs4_cmd_hdr(unfs4), fh);
+
+        /* SETATTR: the anonymous stateid, then the SIZE alone */
+        p = put_op(unfs4, p, OP_SETATTR) + 16;
+        p = put32(p, 1);
+        p = put32(p, 0x10);
+        p = put32(p, 8);
+        p = put32(p, size >> 32);
+        p = put32(p, size);
+        return unfs4_rpc(unfs4, p, NULL, 0, NULL, 0) ? -1 : 0;
+}
+#endif /* UNFS4_FEATURE_TRUNCATE */
 
 struct unfs4_context *unfs4_init_context(uint32_t ip, uint32_t uid, uint32_t gid)
 {

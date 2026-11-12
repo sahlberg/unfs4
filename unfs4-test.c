@@ -96,11 +96,11 @@ int main(int argc, char *argv[])
 
         snprintf(dir, sizeof(dir), "unfs4-test.%d", getpid());
         CHECK(unfs4_mkdir(u, dir) == 0, "mkdir");
-        CHECK(unfs4_mkdir(u, dir) != 0, "mkdir of an existing directory fails");
+        CHECK(unfs4_mkdir(u, dir) != 0 && u->status == 17, "mkdir of an existing directory fails with EXIST");
         CHECK(unfs4_stat(u, dir, &st) == 0 && st.type == NF4DIR, "stat directory");
 
         snprintf(a, sizeof(a), "%s/hello.txt", dir);
-        CHECK(unfs4_open(u, a, O_RDONLY) == NULL, "open of a missing file fails");
+        CHECK(unfs4_open(u, a, O_RDONLY) == NULL && u->status == 2, "open of a missing file fails with NOENT");
         fh = unfs4_open(u, a, O_RDWR | O_CREAT);
         CHECK(fh != NULL, "create");
         if (fh) {
@@ -180,6 +180,10 @@ int main(int argc, char *argv[])
                         free(fh);
                 }
                 CHECK(unfs4_stat(u, lp, &st) == 0 && st.size == 1, "stat 440 byte path");
+                fh = unfs4_open(u, lp, O_RDWR);
+                CHECK(fh && unfs4_truncate(u, fh, 0) == 0 && unfs4_size(u, fh) == 0, "truncate to 0");
+                CHECK(fh && unfs4_truncate(u, fh, 5000) == 0 && unfs4_size(u, fh) == 5000, "truncate to extend");
+                free(fh);
                 {
                         struct unfs4_dir *dh = unfs4_opendir(u, sub);
                         struct unfs4_dirent *de = dh ? unfs4_readdir(u, dh) : NULL;
@@ -192,7 +196,7 @@ int main(int argc, char *argv[])
                 for (i = 200; i < (int)sizeof(huge) - 1; i += 201) {
                         huge[i] = '/';
                 }
-                CHECK(unfs4_open(u, huge, O_RDONLY) == NULL, "over-long path refused");
+                CHECK(unfs4_open(u, huge, O_RDONLY) == NULL && u->status == 63, "over-long path refused with NAMETOOLONG");
                 CHECK(unfs4_stat(u, huge, &st) != 0, "over-long stat refused");
                 CHECK(unfs4_rename(u, lp, lp) != 0, "rename of two 440 byte paths refused");
                 CHECK(unfs4_unlink(u, lp) == 0, "unlink 440 byte path");
@@ -201,7 +205,7 @@ int main(int argc, char *argv[])
 
         list(u, dir);
 
-        CHECK(unfs4_rmdir(u, dir) != 0, "rmdir of a non-empty directory fails");
+        CHECK(unfs4_rmdir(u, dir) != 0 && u->status == 66, "rmdir of a non-empty directory fails with NOTEMPTY");
         CHECK(unfs4_unlink(u, b) == 0, "unlink");
         for (i = 0; i < 20; i++) {
                 snprintf(name, sizeof(name), "%s/file-with-a-longish-name-%02d", dir, i);

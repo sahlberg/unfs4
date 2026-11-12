@@ -30,6 +30,7 @@
  * UNFS4_FEATURE_MKDIR : Adds unfs4_mkdir()
  * UNFS4_FEATURE_UNLINK : Adds unfs4_unlink() and unfs4_rmdir()
  * UNFS4_FEATURE_RENAME : Adds unfs4_rename()
+ * UNFS4_FEATURE_TRUNCATE : Adds unfs4_truncate()
  * UNFS4_FEATURE_TINY_TCP : Talks to the server through the tiny TCP/IP stack
  *                          in usmb2/z80 instead of the sockets API. Always on
  *                          for Z80.
@@ -65,6 +66,9 @@
 #define UNFS4_DIR_SIZE 1024
 #endif
 
+/* unfs4_context status when the connection failed, after which every call fails */
+#define UNFS4_ERR_CONN 0xffffffff
+
 /* NFSv4 file types, struct unfs4_attr type */
 #define NF4REG 1
 #define NF4DIR 2
@@ -75,6 +79,8 @@ struct unfs4_context {
         uint32_t uid;
         uint32_t gid;
         int nops;
+        /* Of the last call: 0, an NFS4ERR_*, or UNFS4_ERR_CONN */
+        uint32_t status;
         /* The filehandle of the export as XDR opaque: length, then data */
         uint8_t root[4 + UNFS4_MAX_FH];
         uint8_t buf[UNFS4_SIZE];
@@ -176,5 +182,10 @@ int unfs4_remove(struct unfs4_context *unfs4, const char *name);
  */
 int unfs4_rename(struct unfs4_context *unfs4, const char *oldname, const char *newname);
 #endif /* UNFS4_FEATURE_RENAME */
+
+#ifdef UNFS4_FEATURE_TRUNCATE
+/* Sets the size of an open file, e.g. 0 to write it anew */
+int unfs4_truncate(struct unfs4_context *unfs4, uint8_t *fh, uint64_t size);
+#endif /* UNFS4_FEATURE_TRUNCATE */
 
 #endif /* !_UNFS4_H_ */
